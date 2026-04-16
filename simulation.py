@@ -1,52 +1,91 @@
-from body import Body
-from path import Path
 import numpy as np
-import pygame
-from vverlet2d import *
 
-def simulate(G, softening, body_list):
+class Simulation:
+    def __init__(self,bodies):
+        self.n = len(bodies)
+        self.bodies = bodies
+        self.positions = np.asarray([b.position for b in bodies],"float64")
+        self.velocities = np.asarray([b.velocity for b in bodies],"float64")
+        self.accelerations = np.asarray([b.acceleration for b in bodies],"float64")
+        self.masses = np.asarray([b.mass for b in bodies])
+        self.sizes = [b.size for b in bodies]
+        self.dt = 0.017
     
-    pygame.init()
-    running = True
-    screen = pygame.display.set_mode((960,540))
-    dt = 0.017
-    clock  = pygame.time.Clock()
-    screen_scale = set_screen_scale(body_list,screen)
-    size_list = create_size_list(body_list)
+    def add_body(self,new_body):
+        self.n += 1
+        self.bodies.append(new_body)
+        self.sizes.append(new_body.size)
+        self.masses = np.append(self.masses,new_body.mass)
+        self.positions = np.append(self.positions,new_body.position).reshape((self.n,2))
+        self.velocities = np.append(self.velocities,new_body.velocity).reshape((self.n,2))
+        self.accelerations = np.append(self.accelerations,np.zeros(2)).reshape((self.n,2))
 
-    # actual simulation done here
-    positions,velocities,accelerations,mass_vector, mass_products = setup_verlet(body_list)
-    while running:
-        screen.fill((0,0,0))
-        positions, velocities, accelerations = step(positions,velocities,accelerations,dt,G,mass_vector,mass_products, softening)
-        pix_coords = [i*screen_scale + np.asarray(pygame.display.get_window_size())/2 for i in positions]
-        for i in range(len(pix_coords)):
-            pygame.draw.circle(screen,"white",(pix_coords[i][0],pix_coords[i][1]),size_list[i])
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-        pygame.display.flip()
-        dt = clock.tick(60)/1000
-    pygame.quit()
+    def set_dt(self,dt):
+        self.dt = dt
 
-""" def update_path(path, body_positions, frame):
-    path.x[frame] = body_positions[:,0]
-    path.y[frame] = body_positions[:,1] """
+    def set_G(self,G):
+        self.G = G
 
-def create_size_list(body_list):
-    size_list = np.array([body.size for body in body_list])
-    return size_list
+    def set_softening(self,softening):
+        self.softening = softening
 
-def set_screen_scale(body_list,screen):
-    # pixel pos = sim pos * screen scale
-    max_pos = [0,0]
-    # optional scale factor
-    scale_factor = 2
-    for body in body_list:
-        max_pos = [max(max_pos[0],np.abs(body.position[0])),max(max_pos[1],np.abs(body.position[1]))]
-    # account for origin of sim being (0,0)
-    max_pos *= 2 
-    max_pos *= scale_factor
-    screen_size = pygame.display.get_window_size()
-    screen_scale = screen_size[1]/np.sqrt(np.dot(max_pos,max_pos))
-    return screen_scale
+    def get_distances(self):
+
+        # distance vectors between each body stored in an nxn matrix ('distances')
+        distances = np.zeros((self.n,self.n,2))
+        for i in range(self.n-1):
+            comparisons = self.n-i-1
+
+            # create an array comprised of repeated copies of current body's position
+            single_arr = self.positions[i]*np.ones(comparisons)[:,np.newaxis]
+
+            # rest of the positions
+            multiple_arr = [self.positions[j] for j in range(i+1,self.n)]
+
+            # calculate distances
+            distances[i][i+1:] = np.subtract(multiple_arr,single_arr) 
+
+        # populate rest of array with the inverted distances
+        distances = distances - np.transpose(distances, (1,0,2))
+
+        distances_squared = np.sum(distances*distances,axis=2)
+        distance_magnitudes = np.sqrt(distances_squared)
+
+        # add the identity to prevent nan (this won't affect anything)
+        distances_squared = distances_squared + np.identity(self.n)
+        distance_magnitudes = distance_magnitudes + np.identity(self.n)
+
+        self.distances_matrix = distances
+        self.distances_squared_matrix = distances_squared
+        self.distances_mag_matrix = distance_magnitudes
+
+    def get_forces(self):
+        self.get_distances()
+        forces = np.zeros((self.n,self.n,2))
+        force_magnitudes = self.G*np.outer(self.masses,self.masses)/(self.distances_squared_matrix + (self.softening*np.ones((self.n,self.n))))
+        forces = force_magnitudes/self.distances_mag_matrix
+        forces = forces[:,:,np.newaxis]*self.distances_matrix
+
+        self.forces_matrix = forces
+        self.forces_mag_matrix = force_magnitudes
+        
+        net_force = np.zeros((self.n,2))
+        for i in range(self.n):
+            net_force[i] = np.sum(np.array([j for j in forces[i]]),axis=0)
+        self.net_forces = net_force
+
+    def update_positions(self):
+        self.positions += self.dt*self.velocities + 0.5*self.dt*self.dt*self.accelerations
+
+    def update_accelerations(self):
+        self.get_forces()
+        self.avg_accel = 0.5*(self.accelerations + self.net_forces/self.masses[:,np.newaxis])
+        self.accelerations = self.net_forces/self.masses[:,np.newaxis]    
+
+    def update_velocities(self):
+        self.velocities += self.dt*self.avg_accel
+
+    def step(self):
+        self.update_positions()
+        self.update_accelerations()
+        self.update_velocities()
