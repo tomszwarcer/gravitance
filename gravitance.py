@@ -22,12 +22,27 @@ class Gravitance:
         self.set_screen_scale()
 
         running = True
+        clicked = False
         while running:
             self.screen.fill((0,0,0))
             self.simulation.step()
             pix_coords = self.sim2pix(self.simulation.positions)
             for i in range(self.simulation.n):
                 pygame.draw.circle(self.screen,"white",(pix_coords[i][0],pix_coords[i][1]),self.simulation.sizes[i])
+
+
+            # mouse click system
+            mouse_pos = pygame.mouse.get_pos()
+            pygame.draw.circle(self.screen,"red",mouse_pos,10)
+            if pygame.mouse.get_pressed()[0] and not clicked:
+                clicked = True
+                clicked_pos = mouse_pos
+            if clicked and pygame.mouse.get_pressed()[0]:
+                self.clicked_procedure(clicked_pos,pygame.mouse.get_pos())
+            elif clicked:
+                clicked = False
+                self.release_procedure(clicked_pos,pygame.mouse.get_pos())
+
 
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -40,17 +55,39 @@ class Gravitance:
 
         self.screen_scale = self.screen_size[1]/20
 
-    def pix2sim(pix_coords):
+    def pix2sim(self,pix_coords):
         # sim pos = pixel pos / screen scale
-        pass
+        sim_coords = np.zeros_like(pix_coords)
+        if sim_coords.ndim == 1:
+            sim_coords[0] = pix_coords[0] - np.asarray(self.screen_size)[0]/2
+            sim_coords[1] = np.asarray(self.screen_size)[1]/2 - pix_coords[1]
+            sim_coords = sim_coords/self.screen_scale
+        else:
+            sim_coords[:,0] -= np.asarray(self.screen_size)[0]/2
+            sim_coords[:,1] = np.asarray(self.screen_size)[1]/2 - pix_coords[:,1]
+            sim_coords = sim_coords/self.screen_scale
+        return sim_coords
 
     def sim2pix(self,sim_coords):
         # pixel pos = sim pos * screen scale
         pix_coords = sim_coords*self.screen_scale
-        pix_coords[:,0] += np.asarray(self.screen_size)[0]/2
-        pix_coords[:,1] = np.asarray(self.screen_size)[1]/2 - pix_coords[:,1]
+        if pix_coords.ndim == 1:
+            pix_coords[0] += np.asarray(self.screen_size)[0]/2
+            pix_coords[1] = np.asarray(self.screen_size)[1]/2 - pix_coords[1]
+        else:
+            pix_coords[:,0] += np.asarray(self.screen_size)[0]/2
+            pix_coords[:,1] = np.asarray(self.screen_size)[1]/2 - pix_coords[:,1]
         return pix_coords
     
+    def clicked_procedure(self,clicked_pos,end_pos):
+        pygame.draw.line(self.screen,"red",clicked_pos,end_pos,width=10)
+
+    def release_procedure(self,clicked_pos,end_pos):
+        new_body_pos = self.pix2sim(end_pos)
+        diff = np.asarray(end_pos) - np.asarray(clicked_pos)
+        velocity_sf = 0.1
+        velocity = velocity_sf * np.asarray([-1*diff[0],diff[1]])
+        self.simulation.add_body(Body(new_body_pos,velocity,10,5))
 
 gravitance = Gravitance((960,540))
 gravitance.run()
