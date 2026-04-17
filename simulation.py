@@ -14,7 +14,7 @@ class Simulation:
     def add_body(self,new_body):
         self.n += 1
         self.bodies.append(new_body)
-        self.sizes.append(new_body.size)
+        self.sizes = np.append(self.sizes,new_body.size)
         self.masses = np.append(self.masses,new_body.mass)
         self.positions = np.append(self.positions,new_body.position).reshape((self.n,2))
         self.velocities = np.append(self.velocities,new_body.velocity).reshape((self.n,2))
