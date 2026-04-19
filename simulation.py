@@ -21,7 +21,8 @@ class Simulation:
         self.positions = np.append(self.positions,new_body.position).reshape((self.n,2))
         self.velocities = np.append(self.velocities,new_body.velocity).reshape((self.n,2))
         self.accelerations = np.append(self.accelerations,np.zeros(2)).reshape((self.n,2))
-        new_body.set_index(self.n - 1)
+        new_body.set_colour(np.random.uniform(0,256,3))
+
 
     def set_dt(self,dt):
         self.dt = dt

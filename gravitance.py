@@ -31,9 +31,12 @@ class Gravitance:
         self.simulation.set_softening(0.01)
         self.set_screen_scale()
 
+        self.bind_mode_i = -1
+        self.bind_mode_j = -1
+
         while self.running:
             self.screen.fill((0,0,0))
-            info_text = self.font.render("p: pause\nx: zoom in\nz:zoom out\nwasd: move camera\nj: change mode\n\nMode: "+self.mode_list[self.mode],True,"red")
+            info_text = self.font.render("p: pause\nr: reset\nx: zoom in\nz:zoom out\nwasd: move camera\nj: change mode\n\nMode: "+self.mode_list[self.mode],True,"red")
             paused_text = self.font.render("Paused (press p to unpause)",True,"red")
             self.screen.blit(info_text,self.screen_size*0.05)
             if self.paused: self.screen.blit(paused_text,(self.screen_size[0]*0.65,self.screen_size[1]*0.05))
@@ -41,7 +44,7 @@ class Gravitance:
                 if not self.paused: self.simulation.step()
                 pix_coords = self.sim2pix(self.simulation.positions)
                 for i in range(self.simulation.n):
-                    pygame.draw.circle(self.screen,"white",(pix_coords[i][0],pix_coords[i][1]),self.simulation.sizes[i]*np.sqrt(self.camera.size_sf))
+                    pygame.draw.circle(self.screen,pygame.color.Color(self.simulation.bodies[i].colour),(pix_coords[i][0],pix_coords[i][1]),self.simulation.sizes[i]*np.sqrt(self.camera.size_sf))
 
             self.mouse_event()
             self.hold_key_event()
@@ -94,7 +97,7 @@ class Gravitance:
     def add_mode_mouse_clicked(self,clicked_pos,end_pos):
         pygame.draw.line(self.screen,"red",clicked_pos,end_pos,width=5)
         pygame.draw.circle(self.screen,"red",self.mouse_pos,self.mouse_hold_counter*np.sqrt(self.camera.size_sf))
-        self.mouse_hold_counter += 0.1
+        self.mouse_hold_counter += 0.3
 
     def add_mode_mouse_release(self,clicked_pos,end_pos):
         new_body_pos = self.pix2sim(np.asarray(end_pos,dtype="float64"))
@@ -123,7 +126,7 @@ class Gravitance:
             if not pygame.mouse.get_pressed()[0] and not self.mouse_clicked:
                 for i in range(self.simulation.n):
                     if mouse_body_comparison[i] < 0:
-                        pygame.draw.circle(self.screen,"green",(pix_coords[i][0],pix_coords[i][1]),self.simulation.sizes[i]*np.sqrt(self.camera.size_sf))
+                        pygame.draw.circle(self.screen,"white",(pix_coords[i][0],pix_coords[i][1]),(self.simulation.sizes[i]+1)*np.sqrt(self.camera.size_sf),2)
                         self.bind_mode_i = i
                         continue
             if pygame.mouse.get_pressed()[0] and not self.mouse_clicked:
@@ -136,13 +139,13 @@ class Gravitance:
                 self.bind_mode_mouse_release()    
 
     def bind_mode_mouse_clicked(self,clicked_pos,end_pos):
-        pygame.draw.circle(self.screen,"green",clicked_pos,self.simulation.sizes[self.bind_mode_i]*np.sqrt(self.camera.size_sf))
-        pygame.draw.line(self.screen,"green",clicked_pos,end_pos,width=5)
+        pygame.draw.circle(self.screen,"white",clicked_pos,(self.simulation.sizes[self.bind_mode_i]+1)*np.sqrt(self.camera.size_sf),2)
+        pygame.draw.line(self.screen,"white",clicked_pos,end_pos,width=5)
         pix_coords = self.sim2pix(self.simulation.positions)
         mouse_body_comparison = np.linalg.norm(end_pos*np.ones_like(pix_coords) - pix_coords,axis=1) - self.simulation.sizes*np.sqrt(self.camera.size_sf)
         for j in range(self.simulation.n):
             if mouse_body_comparison[j] < 0:
-                pygame.draw.circle(self.screen,"green",(pix_coords[j][0],pix_coords[j][1]),self.simulation.sizes[j]*np.sqrt(self.camera.size_sf))
+                pygame.draw.circle(self.screen,"white",(pix_coords[j][0],pix_coords[j][1]),(self.simulation.sizes[j]+1)*np.sqrt(self.camera.size_sf),2)
                 self.bind_mode_j = j
                 continue
 
@@ -153,11 +156,11 @@ class Gravitance:
         self.key_pressed = pygame.key.get_pressed()
 
         if self.key_pressed[pygame.K_x]:
-            self.camera.radial_sf = self.camera.radial_sf * 1.2
-            self.camera.size_sf = self.camera.size_sf * 1.2
+            self.camera.radial_sf = self.camera.radial_sf * 1.05
+            self.camera.size_sf = self.camera.size_sf * 1.05
         if self.key_pressed[pygame.K_z]:
-            self.camera.radial_sf = self.camera.radial_sf / 1.2
-            self.camera.size_sf = self.camera.size_sf / 1.2
+            self.camera.radial_sf = self.camera.radial_sf / 1.05
+            self.camera.size_sf = self.camera.size_sf / 1.05
 
         if self.key_pressed[pygame.K_w]:
             self.camera.sim_origin[1] -= 10
@@ -187,7 +190,7 @@ class Gravitance:
 
 class Camera:
     def __init__(self):
-        self.screen_visible_region = 3
+        self.screen_visible_region = 5
         self.size_sf = 1 # used to scale objects when zooming
         self.radial_sf = 1 # used to scale distances when zooming
         self.sim_origin = np.asarray([0,0])

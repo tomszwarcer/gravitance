@@ -11,6 +11,6 @@ class Body:
         else:
             self.size = size
         
-    def set_index(self,idx):
-        self.index = idx
+    def set_colour(self,colour):
+        self.colour = colour
     
