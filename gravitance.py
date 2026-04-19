@@ -6,6 +6,8 @@ import numpy as np
 class Gravitance:
     def __init__(self,screen_size):
         pygame.init()
+        pygame.font.init()
+        self.font = pygame.font.SysFont("Times New Roman",15)
         self.screen = pygame.display.set_mode(screen_size)
         self.screen_size = np.asarray(pygame.display.get_window_size())
         self.camera = Camera()
@@ -13,6 +15,7 @@ class Gravitance:
         self.running = True
         self.mouse_clicked = False
         self.mouse_hold_counter = 0
+        self.paused = False
         
 
     def run(self):
@@ -29,17 +32,22 @@ class Gravitance:
 
         while self.running:
             self.screen.fill((0,0,0))
-            self.simulation.step()
+            info_text = self.font.render("p: pause\nx: zoom in\nz:zoom out\nwasd: move camera\nj: add mode\nk: bind mode",True,"red")
+            self.screen.blit(info_text,self.screen_size*0.05)
+            if not self.paused: self.simulation.step()
             pix_coords = self.sim2pix(self.simulation.positions)
             for i in range(self.simulation.n):
                 pygame.draw.circle(self.screen,"white",(pix_coords[i][0],pix_coords[i][1]),self.simulation.sizes[i]*np.sqrt(self.camera.size_sf))
 
             self.mouse_event()
-            self.key_event()
+            self.hold_key_event()
 
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.running = False
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_p:
+                        self.paused = not self.paused
             pygame.display.flip()
             self.simulation.set_dt(self.clock.tick(60)/1000)
         pygame.quit()
@@ -96,8 +104,9 @@ class Gravitance:
             self.mouse_release_procedure(self.mouse_clicked_pos,pygame.mouse.get_pos())
 
 
-    def key_event(self):
+    def hold_key_event(self):
         self.key_pressed = pygame.key.get_pressed()
+
         if self.key_pressed[pygame.K_x]:
             self.camera.radial_sf = self.camera.radial_sf * 1.05
             self.camera.size_sf = self.camera.size_sf * 1.05
@@ -114,15 +123,15 @@ class Gravitance:
         if self.key_pressed[pygame.K_d]:
             self.camera.sim_origin[0] -= 10
 
+        
+
 class Camera:
     def __init__(self):
         self.screen_visible_region = 3
         self.size_sf = 1 # used to scale objects when zooming
         self.radial_sf = 1 # used to scale distances when zooming
-        self.x_offset = 0
-        self.y_offset = 0
         self.sim_origin = np.asarray([0,0])
 
 
-gravitance = Gravitance((500,500))
+gravitance = Gravitance((800,500))
 gravitance.run()
