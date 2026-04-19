@@ -11,8 +11,8 @@ class Gravitance:
         self.screen = pygame.display.set_mode(screen_size)
         self.screen_size = np.asarray(pygame.display.get_window_size())
 
-        while True:
-            self.run()
+        while self.run():
+            pass
 
 
     def run(self):
@@ -57,10 +57,11 @@ class Gravitance:
                     if self.mode == 1 and event.key == pygame.K_b:
                         self.bind(0,1)
                     if event.key == pygame.K_r:
-                        return
+                        return True
             pygame.display.flip()
             self.simulation.set_dt(self.clock.tick(60)/1000)
         pygame.quit()
+        return False
 
     def set_screen_scale(self):
         # We show a region of self.camera.screen_visible_region sim units in the y direction
@@ -84,7 +85,10 @@ class Gravitance:
         pix_coords[:] += self.camera.sim_origin 
         pix_coords *= self.camera.radial_sf
         pix_coords[:] += self.screen_size/2
-        pix_coords[:,1] = self.screen_size[1] - pix_coords[:,1]
+        if pix_coords.ndim == 1:
+            pix_coords[1] = self.screen_size[1] - pix_coords[1]
+        else:
+            pix_coords[:,1] = self.screen_size[1] - pix_coords[:,1]
         return pix_coords
     
     def add_mode_mouse_clicked(self,clicked_pos,end_pos):
@@ -103,27 +107,57 @@ class Gravitance:
     def mouse_event(self):
         # mouse click system
         self.mouse_pos = pygame.mouse.get_pos()
-        if not self.mouse_clicked: pygame.draw.circle(self.screen,"red",self.mouse_pos,7,3)
         if self.mode == 0:
+            if not self.mouse_clicked: pygame.draw.circle(self.screen,"red",self.mouse_pos,7,3)
             if pygame.mouse.get_pressed()[0] and not self.mouse_clicked:
                 self.mouse_clicked = True
                 self.mouse_clicked_pos = self.mouse_pos
             if self.mouse_clicked and pygame.mouse.get_pressed()[0]:
-                self.add_mode_mouse_clicked(self.mouse_clicked_pos,pygame.mouse.get_pos())
+                self.add_mode_mouse_clicked(self.mouse_clicked_pos,self.mouse_pos)
             elif self.mouse_clicked:
                 self.mouse_clicked = False
-                self.add_mode_mouse_release(self.mouse_clicked_pos,pygame.mouse.get_pos())
+                self.add_mode_mouse_release(self.mouse_clicked_pos,self.mouse_pos)
+        if self.mode == 1 and self.simulation.n >= 2:
+            pix_coords = self.sim2pix(self.simulation.positions)
+            mouse_body_comparison = np.linalg.norm(self.mouse_pos*np.ones_like(pix_coords) - pix_coords,axis=1) - self.simulation.sizes*np.sqrt(self.camera.size_sf)
+            if not pygame.mouse.get_pressed()[0] and not self.mouse_clicked:
+                for i in range(self.simulation.n):
+                    if mouse_body_comparison[i] < 0:
+                        pygame.draw.circle(self.screen,"green",(pix_coords[i][0],pix_coords[i][1]),self.simulation.sizes[i]*np.sqrt(self.camera.size_sf))
+                        self.bind_mode_i = i
+                        continue
+            if pygame.mouse.get_pressed()[0] and not self.mouse_clicked:
+                self.mouse_clicked = True
+                self.mouse_clicked_pos = self.mouse_pos
+            if self.mouse_clicked and pygame.mouse.get_pressed()[0]:
+                self.bind_mode_mouse_clicked(self.sim2pix(self.simulation.positions[self.bind_mode_i]),self.mouse_pos)
+            elif self.mouse_clicked:
+                self.mouse_clicked = False
+                self.bind_mode_mouse_release()    
 
+    def bind_mode_mouse_clicked(self,clicked_pos,end_pos):
+        pygame.draw.circle(self.screen,"green",clicked_pos,self.simulation.sizes[self.bind_mode_i]*np.sqrt(self.camera.size_sf))
+        pygame.draw.line(self.screen,"green",clicked_pos,end_pos,width=5)
+        pix_coords = self.sim2pix(self.simulation.positions)
+        mouse_body_comparison = np.linalg.norm(end_pos*np.ones_like(pix_coords) - pix_coords,axis=1) - self.simulation.sizes*np.sqrt(self.camera.size_sf)
+        for j in range(self.simulation.n):
+            if mouse_body_comparison[j] < 0:
+                pygame.draw.circle(self.screen,"green",(pix_coords[j][0],pix_coords[j][1]),self.simulation.sizes[j]*np.sqrt(self.camera.size_sf))
+                self.bind_mode_j = j
+                continue
+
+    def bind_mode_mouse_release(self):
+        self.bind(self.bind_mode_i,self.bind_mode_j) 
 
     def hold_key_event(self):
         self.key_pressed = pygame.key.get_pressed()
 
         if self.key_pressed[pygame.K_x]:
-            self.camera.radial_sf = self.camera.radial_sf * 1.05
-            self.camera.size_sf = self.camera.size_sf * 1.05
+            self.camera.radial_sf = self.camera.radial_sf * 1.2
+            self.camera.size_sf = self.camera.size_sf * 1.2
         if self.key_pressed[pygame.K_z]:
-            self.camera.radial_sf = self.camera.radial_sf / 1.05
-            self.camera.size_sf = self.camera.size_sf / 1.05
+            self.camera.radial_sf = self.camera.radial_sf / 1.2
+            self.camera.size_sf = self.camera.size_sf / 1.2
 
         if self.key_pressed[pygame.K_w]:
             self.camera.sim_origin[1] -= 10
@@ -157,6 +191,9 @@ class Camera:
         self.size_sf = 1 # used to scale objects when zooming
         self.radial_sf = 1 # used to scale distances when zooming
         self.sim_origin = np.asarray([0,0])
+
+    def set_sim_origin(self,sim_origin):
+        self.sim_origin = np.asarray(sim_origin)
 
 
 gravitance = Gravitance((800,500))
