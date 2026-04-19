@@ -7,31 +7,35 @@ class Gravitance:
     def __init__(self,screen_size):
         pygame.init()
         self.screen = pygame.display.set_mode(screen_size)
-        self.screen_size = pygame.display.get_window_size()
+        self.screen_size = np.asarray(pygame.display.get_window_size())
         self.camera = Camera()
         self.clock  = pygame.time.Clock()
         self.running = True
         self.mouse_clicked = False
         self.mouse_hold_counter = 0
+        
 
     def run(self):
         
         # define bodies
-        body_1 = Body([-1,0],[0,0.5],10)
-        body_2 = Body([1,0],[0,-0.5],10)
+        body_1 = Body([1,0],[0,0.5],10)
+        body_2 = Body([-1,0],[0,-0.5],10)
+        body_3 = Body([1,0],[0,0],10)
 
         self.simulation = Simulation([body_1,body_2])
         self.simulation.set_G(0.1)
         self.simulation.set_softening(0.01)
         self.set_screen_scale()
+        print(self.pix2sim(self.screen_size/2 + [2,0]))
 
         while self.running:
-            print(self.clock.get_fps())
+            #print(self.screen_scale)
+            #print(self.clock.get_fps())
             self.screen.fill((0,0,0))
             self.simulation.step()
             pix_coords = self.sim2pix(self.simulation.positions)
             for i in range(self.simulation.n):
-                pygame.draw.circle(self.screen,"white",(pix_coords[i][0],pix_coords[i][1]),self.simulation.sizes[i] *self.camera.size_sf)
+                pygame.draw.circle(self.screen,"white",(pix_coords[i][0],pix_coords[i][1]),self.simulation.sizes[i]*np.sqrt(self.camera.size_sf))
 
             self.mouse_event()
             self.key_event()
@@ -49,25 +53,23 @@ class Gravitance:
 
     def pix2sim(self,pix_coords):
         # sim pos = pixel pos / screen scale
-        sim_coords = np.zeros_like(pix_coords)
-        if sim_coords.ndim == 1:
-            sim_coords[0] = pix_coords[0] - np.asarray(self.screen_size)[0]/2 + self.camera.x_offset
-            sim_coords[1] = np.asarray(self.screen_size)[1]/2 - self.camera.y_offset - pix_coords[1]
+        sim_coords = pix_coords
+        if pix_coords.ndim == 1:
+            sim_coords[1] = self.screen_size[1] - sim_coords[1]
         else:
-            sim_coords[:,0] -= (np.asarray(self.screen_size)[0]/2 + self.self.camera.x_offset)
-            sim_coords[:,1] = np.asarray(self.screen_size)[1]/2 - self.camera.y_offset - pix_coords[:,1]
-        sim_coords = sim_coords/(self.screen_scale*self.camera.radial_sf)
+            sim_coords[:,1] = self.screen_size[1] - sim_coords[:1]
+        sim_coords -= self.screen_size/2
+        sim_coords /= self.camera.radial_sf
+        sim_coords[:] -= self.camera.sim_origin
+        sim_coords /= self.screen_scale
         return sim_coords
 
     def sim2pix(self,sim_coords):
-        # pixel pos = sim pos * screen scale
-        pix_coords = sim_coords*self.screen_scale*self.camera.radial_sf
-        if pix_coords.ndim == 1:
-            pix_coords[0] += (np.asarray(self.screen_size)[0]/2 - self.camera.x_offset)
-            pix_coords[1] = np.asarray(self.screen_size)[1]/2 - self.camera.y_offset - pix_coords[1]
-        else:
-            pix_coords[:,0] += (np.asarray(self.screen_size)[0]/2 - self.camera.x_offset)
-            pix_coords[:,1] = np.asarray(self.screen_size)[1]/2 - self.camera.y_offset - pix_coords[:,1]
+        pix_coords = sim_coords * self.screen_scale
+        pix_coords[:] += self.camera.sim_origin 
+        pix_coords *= self.camera.radial_sf
+        pix_coords[:] += self.screen_size/2
+        pix_coords[:,1] = self.screen_size[1] - pix_coords[:,1]
         return pix_coords
     
     def mouse_clicked_procedure(self,clicked_pos,end_pos):
@@ -76,7 +78,7 @@ class Gravitance:
         self.mouse_hold_counter += 0.1
 
     def mouse_release_procedure(self,clicked_pos,end_pos):
-        new_body_pos = self.pix2sim(end_pos)
+        new_body_pos = self.pix2sim(np.asarray(end_pos,dtype="float64"))
         diff = np.asarray(end_pos) - np.asarray(clicked_pos)
         velocity_sf = 0.01
         velocity = velocity_sf * np.asarray([-1*diff[0],diff[1]])
@@ -100,20 +102,20 @@ class Gravitance:
     def key_event(self):
         self.key_pressed = pygame.key.get_pressed()
         if self.key_pressed[pygame.K_x]:
-            self.camera.radial_sf = self.camera.radial_sf*1.1
-            self.camera.size_sf = self.camera.size_sf*1.1
+            self.camera.radial_sf = self.camera.radial_sf * 1.05
+            self.camera.size_sf = self.camera.size_sf * 1.05
         if self.key_pressed[pygame.K_z]:
-            self.camera.radial_sf = self.camera.radial_sf/1.1
-            self.camera.size_sf = self.camera.size_sf/1.1
+            self.camera.radial_sf = self.camera.radial_sf / 1.05
+            self.camera.size_sf = self.camera.size_sf / 1.05
+
         if self.key_pressed[pygame.K_w]:
-            self.camera.y_offset -= 10
+            self.camera.sim_origin[1] -= 10
         if self.key_pressed[pygame.K_a]:
-            self.camera.x_offset -= 10
+            self.camera.sim_origin[0] += 10
         if self.key_pressed[pygame.K_s]:
-            self.camera.y_offset += 10
+            self.camera.sim_origin[1] += 10
         if self.key_pressed[pygame.K_d]:
-            self.camera.x_offset += 10
-            
+            self.camera.sim_origin[0] -= 10
 
 class Camera:
     def __init__(self):
@@ -122,7 +124,8 @@ class Camera:
         self.radial_sf = 1 # used to scale distances when zooming
         self.x_offset = 0
         self.y_offset = 0
+        self.sim_origin = np.asarray([0,0])
 
 
-gravitance = Gravitance((800,800))
+gravitance = Gravitance((500,500))
 gravitance.run()
