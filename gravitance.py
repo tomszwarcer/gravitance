@@ -26,11 +26,8 @@ class Gravitance:
         self.simulation.set_G(0.1)
         self.simulation.set_softening(0.01)
         self.set_screen_scale()
-        print(self.pix2sim(self.screen_size/2 + [2,0]))
 
         while self.running:
-            #print(self.screen_scale)
-            #print(self.clock.get_fps())
             self.screen.fill((0,0,0))
             self.simulation.step()
             pix_coords = self.sim2pix(self.simulation.positions)
@@ -74,7 +71,7 @@ class Gravitance:
     
     def mouse_clicked_procedure(self,clicked_pos,end_pos):
         pygame.draw.line(self.screen,"red",clicked_pos,end_pos,width=5)
-        pygame.draw.circle(self.screen,"red",self.mouse_pos,self.mouse_hold_counter)
+        pygame.draw.circle(self.screen,"red",self.mouse_pos,self.mouse_hold_counter*np.sqrt(self.camera.size_sf))
         self.mouse_hold_counter += 0.1
 
     def mouse_release_procedure(self,clicked_pos,end_pos):
