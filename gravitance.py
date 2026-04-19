@@ -10,34 +10,38 @@ class Gravitance:
         self.font = pygame.font.SysFont("Times New Roman",15)
         self.screen = pygame.display.set_mode(screen_size)
         self.screen_size = np.asarray(pygame.display.get_window_size())
+
+        while True:
+            self.run()
+
+
+    def run(self):
+
         self.camera = Camera()
         self.clock  = pygame.time.Clock()
         self.running = True
         self.mouse_clicked = False
         self.mouse_hold_counter = 0
-        self.paused = False
+        self.paused = True
+        self.mode_list = ["Add","Bind"]
+        self.mode = 0 # 0 = add, 1 = bind
         
-
-    def run(self):
-        
-        # define bodies
-        body_1 = Body([1,0],[0,0.5],10)
-        body_2 = Body([-1,0],[0,-0.5],10)
-        body_3 = Body([1,0],[0,0],10)
-
-        self.simulation = Simulation([body_1,body_2])
+        self.simulation = Simulation([])
         self.simulation.set_G(0.1)
         self.simulation.set_softening(0.01)
         self.set_screen_scale()
 
         while self.running:
             self.screen.fill((0,0,0))
-            info_text = self.font.render("p: pause\nx: zoom in\nz:zoom out\nwasd: move camera\nj: add mode\nk: bind mode",True,"red")
+            info_text = self.font.render("p: pause\nx: zoom in\nz:zoom out\nwasd: move camera\nj: change mode\n\nMode: "+self.mode_list[self.mode],True,"red")
+            paused_text = self.font.render("Paused (press p to unpause)",True,"red")
             self.screen.blit(info_text,self.screen_size*0.05)
-            if not self.paused: self.simulation.step()
-            pix_coords = self.sim2pix(self.simulation.positions)
-            for i in range(self.simulation.n):
-                pygame.draw.circle(self.screen,"white",(pix_coords[i][0],pix_coords[i][1]),self.simulation.sizes[i]*np.sqrt(self.camera.size_sf))
+            if self.paused: self.screen.blit(paused_text,(self.screen_size[0]*0.65,self.screen_size[1]*0.05))
+            if self.simulation.n != 0:
+                if not self.paused: self.simulation.step()
+                pix_coords = self.sim2pix(self.simulation.positions)
+                for i in range(self.simulation.n):
+                    pygame.draw.circle(self.screen,"white",(pix_coords[i][0],pix_coords[i][1]),self.simulation.sizes[i]*np.sqrt(self.camera.size_sf))
 
             self.mouse_event()
             self.hold_key_event()
@@ -48,6 +52,12 @@ class Gravitance:
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_p:
                         self.paused = not self.paused
+                    if event.key == pygame.K_j:
+                        self.mode = (self.mode + 1) % len(self.mode_list)
+                    if self.mode == 1 and event.key == pygame.K_b:
+                        self.bind(0,1)
+                    if event.key == pygame.K_r:
+                        return
             pygame.display.flip()
             self.simulation.set_dt(self.clock.tick(60)/1000)
         pygame.quit()
@@ -77,12 +87,12 @@ class Gravitance:
         pix_coords[:,1] = self.screen_size[1] - pix_coords[:,1]
         return pix_coords
     
-    def mouse_clicked_procedure(self,clicked_pos,end_pos):
+    def add_mode_mouse_clicked(self,clicked_pos,end_pos):
         pygame.draw.line(self.screen,"red",clicked_pos,end_pos,width=5)
         pygame.draw.circle(self.screen,"red",self.mouse_pos,self.mouse_hold_counter*np.sqrt(self.camera.size_sf))
         self.mouse_hold_counter += 0.1
 
-    def mouse_release_procedure(self,clicked_pos,end_pos):
+    def add_mode_mouse_release(self,clicked_pos,end_pos):
         new_body_pos = self.pix2sim(np.asarray(end_pos,dtype="float64"))
         diff = np.asarray(end_pos) - np.asarray(clicked_pos)
         velocity_sf = 0.01
@@ -94,14 +104,15 @@ class Gravitance:
         # mouse click system
         self.mouse_pos = pygame.mouse.get_pos()
         if not self.mouse_clicked: pygame.draw.circle(self.screen,"red",self.mouse_pos,7,3)
-        if pygame.mouse.get_pressed()[0] and not self.mouse_clicked:
-            self.mouse_clicked = True
-            self.mouse_clicked_pos = self.mouse_pos
-        if self.mouse_clicked and pygame.mouse.get_pressed()[0]:
-            self.mouse_clicked_procedure(self.mouse_clicked_pos,pygame.mouse.get_pos())
-        elif self.mouse_clicked:
-            self.mouse_clicked = False
-            self.mouse_release_procedure(self.mouse_clicked_pos,pygame.mouse.get_pos())
+        if self.mode == 0:
+            if pygame.mouse.get_pressed()[0] and not self.mouse_clicked:
+                self.mouse_clicked = True
+                self.mouse_clicked_pos = self.mouse_pos
+            if self.mouse_clicked and pygame.mouse.get_pressed()[0]:
+                self.add_mode_mouse_clicked(self.mouse_clicked_pos,pygame.mouse.get_pos())
+            elif self.mouse_clicked:
+                self.mouse_clicked = False
+                self.add_mode_mouse_release(self.mouse_clicked_pos,pygame.mouse.get_pos())
 
 
     def hold_key_event(self):
@@ -123,7 +134,22 @@ class Gravitance:
         if self.key_pressed[pygame.K_d]:
             self.camera.sim_origin[0] -= 10
 
-        
+    def bind(self,i,j):
+        # gravitationally bind bodies i,j about their CM
+        x_cm, v_cm = self.simulation.calculate_cm(i,j)
+        r_1 = self.simulation.positions[i] - x_cm
+        r_2 = self.simulation.positions[j] - x_cm
+        r_12 = r_2 - r_1
+        R_squared = np.dot(r_1 + r_2,r_1 + r_2)
+        v_1 = np.sqrt(self.simulation.G * self.simulation.masses[j] * np.sqrt(np.dot(r_1,r_1)) / np.dot(r_12,r_12))
+        v_2 = np.sqrt(self.simulation.G * self.simulation.masses[i] * np.sqrt(np.dot(r_2,r_2)) / np.dot(r_12,r_12))
+        # generate normalised vector orthogonal to r_12
+        orthogonal = np.random.randn(2)
+        orthogonal = orthogonal - (np.dot(orthogonal,r_12/np.linalg.norm(r_12)) * r_12/np.linalg.norm(r_12))
+        orthogonal = orthogonal/np.linalg.norm(orthogonal)
+        self.simulation.velocities[i] = v_cm + v_1 * orthogonal
+        self.simulation.velocities[j] = v_cm - v_2 * orthogonal
+
 
 class Camera:
     def __init__(self):
@@ -134,4 +160,3 @@ class Camera:
 
 
 gravitance = Gravitance((800,500))
-gravitance.run()

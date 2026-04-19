@@ -10,4 +10,7 @@ class Body:
             self.size = 5*np.sqrt(mass)
         else:
             self.size = size
+        
+    def set_index(self,idx):
+        self.index = idx
     

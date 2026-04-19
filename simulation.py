@@ -10,6 +10,8 @@ class Simulation:
         self.masses = np.asarray([b.mass for b in bodies])
         self.sizes = [b.size for b in bodies]
         self.dt = 0.017
+        for i in range(self.n):
+            self.bodies[i].set_index(i)
     
     def add_body(self,new_body):
         self.n += 1
@@ -19,6 +21,7 @@ class Simulation:
         self.positions = np.append(self.positions,new_body.position).reshape((self.n,2))
         self.velocities = np.append(self.velocities,new_body.velocity).reshape((self.n,2))
         self.accelerations = np.append(self.accelerations,np.zeros(2)).reshape((self.n,2))
+        new_body.set_index(self.n - 1)
 
     def set_dt(self,dt):
         self.dt = dt
@@ -89,3 +92,9 @@ class Simulation:
         self.update_positions()
         self.update_accelerations()
         self.update_velocities()
+
+    def calculate_cm(self,i,j):
+        # calculate CM position and velocity between bodies i,j
+        x_cm = (self.masses[i]*self.positions[i] + self.masses[j]*self.positions[j])/(self.masses[i]+self.masses[j])
+        v_cm = (self.masses[i]*self.velocities[i] + self.masses[j]*self.velocities[j])/(self.masses[i]+self.masses[j])
+        return x_cm, v_cm
