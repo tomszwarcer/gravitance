@@ -13,6 +13,8 @@ class Body:
 
         self.trail = Trail(self.position)
 
+        self.can_target = False # False
+
         
     def set_colour(self,colour):
         self.colour = colour

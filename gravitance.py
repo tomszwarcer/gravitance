@@ -10,6 +10,7 @@ class Gravitance:
         self.font = pygame.font.SysFont("Times New Roman",15)
         self.screen = pygame.display.set_mode(screen_size)
         self.screen_size = np.asarray(pygame.display.get_window_size())
+        self.score = 0
 
         while self.run():
             pass
@@ -33,15 +34,40 @@ class Gravitance:
 
         self.bind_mode_i = -1
         self.bind_mode_j = -1
-
+        
+        self.target_size = 0.4
+        self.target_outer_sf = 2
+        self.target_size_pix = self.sim2pix(np.asarray([self.target_size,0])) - (self.screen_size / 2)
+        self.target_pos = np.zeros(2,dtype="float64")
+        self.target_velocity = np.random.uniform(-1,1,2)
+        self.target_velocity *= 0.2/np.linalg.norm(self.target_velocity)
         while self.running:
+
             self.screen.fill((0,0,0))
 
             # display text
             info_text = self.font.render("p: pause\nr: reset\nx: zoom in\nz:zoom out\nwasd: move camera\nj: change mode\n\nMode: "+self.mode_list[self.mode],True,"red")
             paused_text = self.font.render("Paused (press p to unpause)",True,"red")
-            self.screen.blit(info_text,self.screen_size*0.05)
-            if self.paused: self.screen.blit(paused_text,(self.screen_size[0]*0.65,self.screen_size[1]*0.05))
+            score_text = self.font.render("Score: " + str(self.score),True,"red")
+            target_text = self.font.render("Target",True,"white")
+            
+            if self.paused: 
+                self.screen.blit(paused_text,(self.screen_size[0]*0.725,self.screen_size[1]*0.05))
+                self.screen.blit(info_text,self.screen_size*0.05)
+            self.screen.blit(score_text,(self.screen_size[0]*0.45,self.screen_size[1]*0.05))
+            
+            # draw target area
+            self.draw_target_area(target_text)
+            if not self.paused:
+
+                # update bodies that can hit target
+                self.update_target()
+        
+
+                for i in range(self.simulation.n):
+                    if self.simulation.bodies[i].can_target and np.linalg.norm(self.simulation.positions[i] - self.target_pos) < self.target_size:
+                        self.score += 1
+                        return True
 
             if self.simulation.n != 0:
 
@@ -199,6 +225,27 @@ class Gravitance:
         orthogonal = orthogonal/np.linalg.norm(orthogonal)
         self.simulation.velocities[i] = v_cm + v_1 * orthogonal
         self.simulation.velocities[j] = v_cm - v_2 * orthogonal    
+    
+    def draw_target_area(self,target_text):
+        pygame.draw.circle(self.screen,"red",self.sim2pix(self.target_pos),self.target_size_pix[0]*self.target_outer_sf*np.sqrt(self.camera.size_sf))
+        pygame.draw.circle(self.screen,"black",self.sim2pix(self.target_pos),self.target_size_pix[0]*np.sqrt(self.camera.size_sf),3)
+        pygame.draw.circle(self.screen,"white",self.sim2pix(self.target_pos),self.target_size_pix[0]*np.sqrt(self.camera.size_sf),3)
+        self.screen.blit(target_text,self.sim2pix(self.target_pos) - [18,8])
+
+    def update_target(self):
+        self.target_pos += self.target_velocity * self.simulation.dt
+        for i in range(self.simulation.n):
+            # compute vector to target
+            r_target = self.target_pos - self.simulation.positions[i]
+            norm_r_target = np.linalg.norm(r_target)
+            v = np.linalg.norm(self.simulation.velocities[i])
+            if norm_r_target < self.target_outer_sf*self.target_size or v < 0.01: continue
+            alpha_crit = np.arcsin(self.target_outer_sf*self.target_size/norm_r_target)
+            # compute angle of the velocity
+            cos_alpha = np.dot(r_target/norm_r_target,self.simulation.velocities[i]/v)
+            alpha = np.arccos(cos_alpha)
+            if alpha > alpha_crit:
+                self.simulation.bodies[i].can_target = True
 
 class Camera:
     def __init__(self):
