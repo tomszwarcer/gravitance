@@ -22,8 +22,8 @@ class Trail:
         self.x = np.asarray([pos[0]])
         self.y = np.asarray([pos[1]])
         self.trail_index = 0
-        self.trail_length = 100
-        self.trail_spacing = 5
+        self.trail_length = 120
+        self.trail_spacing = 3
         self.spacing_counter = 0
 
     def update_trail(self,pos):

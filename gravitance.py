@@ -55,7 +55,7 @@ class Gravitance:
                     if not self.paused: 
                         trail = self.simulation.bodies[i].trail.update_trail(self.simulation.positions[i])
                     for j in trail:
-                        pygame.draw.circle(self.screen,pygame.color.Color(self.simulation.bodies[i].colour),self.sim2pix(j),2)
+                        pygame.draw.circle(self.screen,pygame.color.Color(self.simulation.bodies[i].colour),self.sim2pix(j),1)
 
             self.mouse_event()
             self.hold_key_event()
@@ -109,14 +109,15 @@ class Gravitance:
     def add_mode_mouse_clicked(self,clicked_pos,end_pos):
         pygame.draw.line(self.screen,"red",clicked_pos,end_pos,width=5)
         pygame.draw.circle(self.screen,"red",self.mouse_pos,self.mouse_hold_counter*np.sqrt(self.camera.size_sf))
-        self.mouse_hold_counter += 0.3
+        self.mouse_hold_counter += 0.3*(np.exp(-1*self.mouse_hold_counter/5))
 
     def add_mode_mouse_release(self,clicked_pos,end_pos):
         new_body_pos = self.pix2sim(np.asarray(end_pos,dtype="float64"))
         diff = np.asarray(end_pos) - np.asarray(clicked_pos)
-        velocity_sf = 0.01
-        velocity = velocity_sf * np.asarray([-1*diff[0],diff[1]])
-        self.simulation.add_body(Body(new_body_pos,velocity,(self.mouse_hold_counter**2)/25))
+        velocity_sf = 0.025
+        mass = ((self.mouse_hold_counter)**2)/25
+        velocity = velocity_sf * np.asarray([-1*diff[0],diff[1]]) / mass # dragging changes momentum instead of velocity
+        self.simulation.add_body(Body(new_body_pos,velocity,mass))
         self.mouse_hold_counter = 0
 
     def mouse_event(self):
