@@ -36,15 +36,26 @@ class Gravitance:
 
         while self.running:
             self.screen.fill((0,0,0))
+
+            # display text
             info_text = self.font.render("p: pause\nr: reset\nx: zoom in\nz:zoom out\nwasd: move camera\nj: change mode\n\nMode: "+self.mode_list[self.mode],True,"red")
             paused_text = self.font.render("Paused (press p to unpause)",True,"red")
             self.screen.blit(info_text,self.screen_size*0.05)
             if self.paused: self.screen.blit(paused_text,(self.screen_size[0]*0.65,self.screen_size[1]*0.05))
+
             if self.simulation.n != 0:
+
                 if not self.paused: self.simulation.step()
                 pix_coords = self.sim2pix(self.simulation.positions)
+
+                # draw bodies and trails
                 for i in range(self.simulation.n):
                     pygame.draw.circle(self.screen,pygame.color.Color(self.simulation.bodies[i].colour),(pix_coords[i][0],pix_coords[i][1]),self.simulation.sizes[i]*np.sqrt(self.camera.size_sf))
+                    trail = self.simulation.bodies[i].trail.get_trail()
+                    if not self.paused: 
+                        trail = self.simulation.bodies[i].trail.update_trail(self.simulation.positions[i])
+                    for j in trail:
+                        pygame.draw.circle(self.screen,pygame.color.Color(self.simulation.bodies[i].colour),self.sim2pix(j),2)
 
             self.mouse_event()
             self.hold_key_event()
@@ -61,6 +72,7 @@ class Gravitance:
                         self.bind(0,1)
                     if event.key == pygame.K_r:
                         return True
+                    
             pygame.display.flip()
             self.simulation.set_dt(self.clock.tick(60)/1000)
         pygame.quit()
@@ -185,8 +197,7 @@ class Gravitance:
         orthogonal = orthogonal - (np.dot(orthogonal,r_12/np.linalg.norm(r_12)) * r_12/np.linalg.norm(r_12))
         orthogonal = orthogonal/np.linalg.norm(orthogonal)
         self.simulation.velocities[i] = v_cm + v_1 * orthogonal
-        self.simulation.velocities[j] = v_cm - v_2 * orthogonal
-
+        self.simulation.velocities[j] = v_cm - v_2 * orthogonal    
 
 class Camera:
     def __init__(self):

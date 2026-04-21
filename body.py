@@ -10,7 +10,37 @@ class Body:
             self.size = 5*np.sqrt(mass)
         else:
             self.size = size
+
+        self.trail = Trail(self.position)
+
         
     def set_colour(self,colour):
         self.colour = colour
+        
+class Trail:
+    def __init__(self,pos):
+        self.x = np.asarray([pos[0]])
+        self.y = np.asarray([pos[1]])
+        self.trail_index = 0
+        self.trail_length = 100
+        self.trail_spacing = 5
+        self.spacing_counter = 0
+
+    def update_trail(self,pos):
+        self.spacing_counter += 1
+        length = len(self.x)
+        if self.spacing_counter % self.trail_spacing == 0:
+            self.trail_index = (self.trail_index + 1) % self.trail_length
+            if length < self.trail_length:
+                self.x = np.append(self.x,pos[0])
+                self.y = np.append(self.y,pos[1])
+                length += 1
+            else:
+                self.x[self.trail_index] = pos[0]
+                self.y[self.trail_index] = pos[1]
+        return np.asarray([np.asarray([self.x[i],self.y[i]]) for i in range(length)])
+    
+    def get_trail(self):
+        length = len(self.x)
+        return np.asarray([np.asarray([self.x[i],self.y[i]]) for i in range(length)])
     
